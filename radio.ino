@@ -61,7 +61,7 @@ enum stateMachineDef {SETUP = 0, TRANSMIT = 1, RECEIVE = 2, BIND = 3 };
 
 static stateMachineDef stateMachine = RECEIVE;
 static unsigned long TX_period = F_rate_low;  // 7700 / 20000 / 40000  us
-static unsigned long RX_last_frame_received = 0, RX_hopping_time = 0;
+static unsigned long RX_last_frame_received = 0, RX_hopping_timeout = 0;
 static bool failsafe_state = true;    // sending Failsafe values by default
 
 static uint8_t calculated_rssi = 0;
@@ -215,7 +215,7 @@ void radio_loop()
           #endif
         RX_last_frame_received = millis();
         
-        RX_hopping_time = micros()  + (TX_period * 2);
+        RX_hopping_timeout = micros()  + (TX_period * 3 / 2);
         if (RX_RSSI < power_thr_low && power_delay_counter-- == 0) {
           power_increase();
           power_delay_counter = TX_POWER_DELAY_FILTER;
@@ -253,9 +253,9 @@ void radio_loop()
   }
   // forced hopping if no data received
   // TODO: Fast recover then slow recover
-  if (micros() > RX_hopping_time) {
+  if (micros() > RX_hopping_timeout) {
 
-    RX_hopping_time = micros()  + (TX_period * 2);
+    RX_hopping_timeout = micros()  + (TX_period * 2);
       
     hop_to_next();
     
