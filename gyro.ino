@@ -99,9 +99,9 @@ static void gyro_acc_common()
       accZero[0] = a[0]/CALSTEPS;
       accZero[1] = a[1]/CALSTEPS;
       accZero[2] = a[2]/CALSTEPS - ACCRESO;   
-    //  Serial.print("  "); Serial.print(accZero[0]); Serial.println();
-    //  Serial.print("  "); Serial.print(accZero[1]); Serial.println();
-    //  Serial.print("  "); Serial.print(accZero[2]); Serial.println();
+
+      ACC_Store();
+      Serial.println("ACC calib Done");
     }
     calibratingA--;
   }
@@ -114,8 +114,12 @@ static void MPU6050_readId()
 {
   uint8_t id;
   i2cRead(MPU6050_ADDRESS, 0x75, 1, &id);
-  if (id == 0x68) Serial.println("6050 ID OK");
-  else Serial.println("6050 ID Failed");
+  if (id == 0x68)
+    Serial.println("6050 ID OK");
+  else { 
+    Serial.println("6050 ID Failed");
+    // TODO: set global error state!
+  }
 }
 
 static void MPU6050_init()
@@ -137,6 +141,22 @@ static void MPU6050_init()
   delay(50);
 }
 
+static void ACC_Read()
+{
+  accZero[0] = read_int16(0);
+  accZero[1] = read_int16(2);
+  accZero[2] = read_int16(4);
+}
+
+static void ACC_Store()
+{
+  write_int16(0, accZero[0]);
+  write_int16(2, accZero[1]);
+  write_int16(4, accZero[2]);
+  EEPROM.write(63, 0x55);
+  EEPROM.commit();
+}
+
 // ------------------------------------- public code -----------------------------------
 
 void gyro_init()
@@ -144,9 +164,14 @@ void gyro_init()
   delay(3000); // give it some time to stop shaking after battery plugin
   MPU6050_init();
   MPU6050_readId(); // must be 0x68, 104dec
+
+  if (EEPROM.read(63) != 0x55) 
+     ; //Serial.println("Need to do ACC calib");
+  else
+    ACC_Read(); // eeprom is initialized
 }
 
-void gyro_getADC () 
+void gyro_getADC() 
 {
   i2cRead(MPU6050_ADDRESS, 0x43,6,rawADC);
   GYRO_ORIENTATION( ((rawADC[0]<<8) | rawADC[1]) , 

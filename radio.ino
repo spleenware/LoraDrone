@@ -57,15 +57,15 @@ static byte current_power = tx_power_low;
 static unsigned long lost_frames = 0;
 static byte power_delay_counter = TX_POWER_DELAY_FILTER;
 
-enum stateMachineDef {SETUP = 0, TRANSMIT = 1, RECEIVE = 2, BIND = 3 };
+enum stateMachineDef { SETUP = 0, TRANSMIT = 1, RECEIVE = 2, BIND = 3 };
 
 static stateMachineDef stateMachine = RECEIVE;
 static unsigned long TX_period = F_rate_low;  // 7700 / 20000 / 40000  us
 static unsigned long RX_last_frame_received = 0, RX_hopping_timeout = 0;
 static bool failsafe_state = true;    // sending Failsafe values by default
 
-static uint8_t calculated_rssi = 0;
-static uint8_t calculated_lost_frames_rssi = 0;
+//static uint8_t calculated_rssi = 0;
+//static uint8_t calculated_lost_frames_rssi = 0;
 
 // ------------------------------------- private code -----------------------------------
 
@@ -145,7 +145,7 @@ static uint8_t calculate_lost_frames_rssi(unsigned long lost_frames) {
  * Return in %.
  * Easy but not reliable - I reported significant packets losts (Failsafe activated) when signal dropped below 55% (-102dB) 
  * It looks like is would be good to adapt the dynamics to sensitivity (SF and BW dependent) and TX power
- */
+ *
 static uint8_t calculate_rssi(int tr_rssi) {
   // Simpliest method used from Lora-net project
   tr_rssi = 157 + tr_rssi; // entire link budget
@@ -160,7 +160,7 @@ static uint8_t calculate_rssi(int tr_rssi) {
   if (tr_rssi > 100) tr_rssi = 100;
   if (tr_rssi < 0)  tr_rssi = 0;
   return (failsafe_state ? 0 : tr_rssi);
-}
+} */
 
 static void decodeRcData(unsigned char RX_Buffer[]) {
   char i = 1;
@@ -173,7 +173,6 @@ static void decodeRcData(unsigned char RX_Buffer[]) {
   rcValue[6]  = (uint16_t) ((RX_Buffer[i+8]>>2 |RX_Buffer[i+9] <<6)                     & 0x07FF);
   rcValue[7]  = (uint16_t) ((RX_Buffer[i+9]>>5 |RX_Buffer[i+10] <<3) & 0x07FF);
 }
-
 
 // ------------------------------------- public code -----------------------------------
 
@@ -194,6 +193,10 @@ void radio_init() {
   LoRa.setSpreadingFactor(6); // 6 to 12 - 6 requires IMPLICIT  
   LoRa.setSignalBandwidth(BW_high);
   LoRa.enableCrc();
+
+  rcValue[THR] = 1000;
+  rcValue[AU1] = 1500;
+  rcValue[AU2] = 1500;
 }
 
 void radio_loop()
@@ -239,7 +242,7 @@ void radio_loop()
       hop_to_next();
       stateMachine = RECEIVE;
 
-      calculated_rssi = calculate_rssi(RX_RSSI);
+      //calculated_rssi = calculate_rssi(RX_RSSI);
       //calculated_lost_frames_rssi= calculate_lost_frames_rssi(lost_frames);
       
       //Serial.println(micros() - packet_timer);
