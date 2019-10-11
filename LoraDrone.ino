@@ -10,6 +10,9 @@
 
 #define CYCLETIME 2
 
+//#define DEBUG_STATE
+//#define DEBUG_ANALYZER
+
 enum ang { ROLL, PITCH, YAW };
 
 #define MINTHROTTLE 1090
@@ -56,7 +59,9 @@ int8_t flightmode;
 int8_t oldflightmode;
 uint8_t armct = 0;
 
-boolean armed = false;
+enum radioModeDef { DISARMED = 0, ARMED = 1, FAILSAFE = 2 };
+
+radioModeDef radioMode = DISARMED;
 
 unsigned long flight_timer = 0;
 

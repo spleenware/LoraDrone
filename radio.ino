@@ -62,7 +62,11 @@ enum stateMachineDef { SETUP = 0, TRANSMIT = 1, RECEIVE = 2, BIND = 3 };
 static stateMachineDef stateMachine = RECEIVE;
 static unsigned long TX_period = F_rate_low;  // 7700 / 20000 / 40000  us
 static unsigned long RX_last_frame_received = 0, RX_hopping_timeout = 0;
-static bool failsafe_state = true;    // sending Failsafe values by default
+
+static unsigned int pending_response_id = 0;  // if non-zero, the id of command we are responding to
+
+// command codes
+#define CMD_ACC_CALIBRATE  0x01
 
 //static uint8_t calculated_rssi = 0;
 //static uint8_t calculated_lost_frames_rssi = 0;
@@ -112,7 +116,7 @@ static int receive_data(byte buf[], int max_len) {
   if (packetSize) {
     int i = 0;
 
-    while (i < max_len && LoRa.available()) {
+    while (i < packetSize && LoRa.available()) {
       buf[i++] = (byte) LoRa.read();
     }
     RX_RSSI = LoRa.packetRssi();
@@ -174,6 +178,19 @@ static void decodeRcData(unsigned char RX_Buffer[]) {
   rcValue[7]  = (uint16_t) ((RX_Buffer[i+9]>>5 |RX_Buffer[i+10] <<3) & 0x07FF);
 }
 
+static void processCommand(unsigned char RX_Buffer[]) {
+
+  unsigned int cmd_id = RX_Buffer[2] | (RX_Buffer[3] << 8);  // extract the command-id
+
+  switch (RX_Buffer[1]) {
+    case CMD_ACC_CALIBRATE:
+      if (radioMode == DISARMED) {
+        gyro_acc_start_calibrating(cmd_id);
+      }
+      break;
+  }
+}
+
 // ------------------------------------- public code -----------------------------------
 
 void radio_init() {
@@ -199,6 +216,11 @@ void radio_init() {
   rcValue[AU2] = 1500;
 }
 
+void radio_send_response_to(unsigned int cmd_id)
+{
+  pending_response_id = cmd_id;
+}
+
 void radio_loop()
 {
   static unsigned char  rx_buf[12];
@@ -208,14 +230,28 @@ void radio_loop()
     case RECEIVE:
       //Serial.println("Test");
       if (int s = receive_data(rx_buf, 12)) {
-          #ifdef DEBUG_ANALYZER
-          Serial.println(""); Serial.print(s); Serial.print("\t");
+          #if defined(DEBUG_ANALYZER) || defined(DEBUG_CH_FREQ)
+          Serial.println(""); Serial.print("\t");
           #endif
-        stateMachine = TRANSMIT;
-        decodeRcData(rx_buf);
-          #ifdef DEBUG_ANALYZER
+
+        if (rx_buf[0] == 'S') {   // RC channel data
+          decodeRcData(rx_buf);
+
+          if (rcValue[AU2] >= 1800 && radioMode != ARMED) {
+            radioMode = ARMED;
+            digitalWrite(LED, HIGH);
+          } else if (rcValue[AU2] < 1800 && radioMode != DISARMED) {
+            radioMode = DISARMED;
+            digitalWrite(LED, LOW);
+          }
+        } else if (rx_buf[0] == 'C') {   // 'command' data
+          processCommand(rx_buf);
+        }
+        stateMachine = TRANSMIT;   // transmit 'ack' next
+
+        #ifdef DEBUG_ANALYZER
           Serial.print(millis() - RX_last_frame_received); Serial.print("ms\t");
-          #endif
+        #endif
         RX_last_frame_received = millis();
         
         RX_hopping_timeout = micros()  + (TX_period * 3 / 2);
@@ -227,16 +263,30 @@ void radio_loop()
           power_decrease();
           power_delay_counter = TX_POWER_DELAY_FILTER;
         }
-        failsafe_state = false;
       }
       break;
     case TRANSMIT:
       tx_buf[0] = RX_RSSI;
       tx_buf[1] = current_power;
-      tx_buf[2] = 0;
-      tx_buf[3] = 0;
-      tx_buf[4] = 0;
-      tx_buf[5] = 0;
+
+      if (pending_response_id) {
+          #ifdef DEBUG_STATE
+            Serial.println("Sending response ");
+          #endif
+        tx_buf[2] = (unsigned char)(pending_response_id & 0xFF);
+        tx_buf[3] = (unsigned char)(pending_response_id >> 8);
+        tx_buf[4] = 0;
+        tx_buf[5] = 'R';   // a command response
+        pending_response_id = 0;   // reset
+      } else {
+          #ifdef DEBUG_STATE
+            Serial.println("Sending ack ");
+          #endif
+        tx_buf[2] = 0;
+        tx_buf[3] = 0;
+        tx_buf[4] = 0;
+        tx_buf[5] = 'A';   // an 'ack'
+      }
       //packet_timer = micros();
       send_data(tx_buf, 6);
       hop_to_next();
@@ -247,10 +297,7 @@ void radio_loop()
       
       //Serial.println(micros() - packet_timer);
       #ifdef DEBUG_ANALYZER
-      for (int i = 0; i < SERVO_CHANNELS; i++) {
-        Serial.print("\t");
-        Serial.print(Servo_Buffer[i]);
-      }
+      Serial.print("\t"); Serial.print(radioMode);
       #endif
       break;
   }
@@ -263,18 +310,17 @@ void radio_loop()
     hop_to_next();
     
     #ifdef DEBUG_CH_FREQ
-    Serial.print("No FR: ");
+    Serial.print(" No FR: ");
     Serial.print(millis() - RX_last_frame_received);
-    Serial.print("ms\thop: ");
-    Serial.println(current_channel);
+    Serial.println("ms\thop");
     #endif
   }
 
   // Failsafe
-  if (millis() - RX_last_frame_received > FAILSAFE_DELAY_MS) {
-    // IBUS, MSP - stop transmitting data
-    failsafe_state = true;
-    
+  if (radioMode == ARMED && millis() - RX_last_frame_received > FAILSAFE_DELAY_MS) {
+    radioMode = FAILSAFE;
+
+    // TODO: flash the LED
     for (int i = 0; i < CHANNELS; i++) {
       rcValue[i] = 1500;
     }

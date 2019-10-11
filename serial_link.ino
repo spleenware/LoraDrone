@@ -11,10 +11,7 @@ static SerialStateDef state = SER_IDLE;
 // ------------------------------------- private code -----------------------------------
 
 static void processSerial() {
-  if (strcmp(sbuf, "ACC") == 0 && !armed) {
-      Serial.println("Doing ACC calib");
-      calibratingA = CALSTEPS;
-  }
+    // now using radio 'command' packets
 }
 
 // ------------------------------------- public code -----------------------------------

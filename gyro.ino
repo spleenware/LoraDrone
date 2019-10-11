@@ -15,6 +15,8 @@ static uint8_t rawADC[6];
 static int16_t gyroADC[3];
 static int16_t accADC[3];
 
+static unsigned int pending_calibrate_id = 0;
+
 // ------------------------------------- private code ---------------------------------
 
 #define MPU6050_ADDRESS 0x68 
@@ -101,7 +103,10 @@ static void gyro_acc_common()
       accZero[2] = a[2]/CALSTEPS - ACCRESO;   
 
       ACC_Store();
-      Serial.println("ACC calib Done");
+      #ifdef DEBUG_ANALYZER
+        Serial.println("ACC calib Done");
+      #endif
+      radio_send_response_to(pending_calibrate_id);
     }
     calibratingA--;
   }
@@ -169,6 +174,15 @@ void gyro_init()
      ; //Serial.println("Need to do ACC calib");
   else
     ACC_Read(); // eeprom is initialized
+}
+
+void gyro_acc_start_calibrating(unsigned int cmd_id) 
+{
+  #ifdef DEBUG_ANALYZER
+    Serial.println("Doing ACC calib");
+  #endif
+  pending_calibrate_id = cmd_id;
+  calibratingA = CALSTEPS;
 }
 
 void gyro_getADC() 

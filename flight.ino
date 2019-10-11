@@ -66,19 +66,7 @@ void flight_modes()
     oldflightmode = flightmode;
   }
 
-  if (armed) {
-    if (rcValue[AU2] < 1800) {
-      armed = false;
-      digitalWrite(LED, LOW);
-    }
-  } else {
-    if (rcValue[AU2] >= 1800 && rcValue[THR] <= MINTHROTTLE) {
-      armed = true;
-      digitalWrite(LED, HIGH);
-    }
-  }
-
-  if (armed) 
+  if (radioMode != DISARMED)
   {
     rcThrottle   = rcValue[THR] - THRCORR;
     rcCommand[ROLL]  = rcValue[ROL] - MIDRUD;
@@ -193,7 +181,7 @@ void flight_zeroGyroAccI()
 
 void flight_quadx_mix()
 {
-  if (armed & (rcThrottle > MINTHROTTLE))
+  if (radioMode != DISARMED && rcThrottle > MINTHROTTLE)
   {
     servo[0] = constrain(rcThrottle - axisPID[ROLL] + axisPID[PITCH] - axisPID[YAW],1000,2000);
     servo[1] = constrain(rcThrottle - axisPID[ROLL] - axisPID[PITCH] + axisPID[YAW],1000,2000);
